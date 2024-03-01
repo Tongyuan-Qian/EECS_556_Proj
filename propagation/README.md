@@ -1,2 +1,2 @@
 # Color Propagator
-Not working.
+see the test case in propagator.py
