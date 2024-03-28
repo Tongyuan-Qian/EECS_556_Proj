@@ -19,6 +19,7 @@ def compute_jnd_map(mono_image):
     # https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7471943
     
     # Use Prewitt filters to compute gradients and orientation
+    mono_image = mono_image.astype(np.float64)
     kernel_h = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]]) / 3
     gradient_h = cv2.filter2D(src=mono_image, ddepth=-1, kernel=kernel_h)
     gradient_v = cv2.filter2D(src=mono_image, ddepth=-1, kernel=kernel_h.T)
@@ -42,7 +43,7 @@ def compute_jnd_map(mono_image):
     # Compute visual masking component of the metric
     luminance_contrast = np.sqrt((np.square(gradient_h) + np.square(gradient_v)) / 2.0)
     visual_masking = (
-        ((1.84 * np.power(luminance_contrast, 2.4)) / (np.square(luminance_contrast) + 676)) 
+        ((1.84 * np.power(luminance_contrast, 24)) / (np.square(luminance_contrast) + 676))
         * ((0.3 * np.power(orientation_regularity, 2.7)) / (np.square(orientation_regularity) + 1)))
 
     # Compute luminance adaptation component of the metric
@@ -133,7 +134,7 @@ def scribbling(Z, J, ps, color_image_lab, W_h, W_v, S=16, N=4):
                     x = p_x + S_x
                     y = p_y + S_y
                     n = Z[y, x]
-                    if np.abs(int(q_l[S_y, S_x]) - int(p[S_y, S_x])) <= 20 * J[y, x] and n < N:
+                    if np.abs(int(q_l[S_y, S_x]) - int(p[S_y, S_x])) <= J[y, x] and n < N:
                         n = Z[y, x]
                         L[y, x, n] = q_l[S_y, S_x]
                         U_a[y, x, n] = q_a[S_y, S_x]
