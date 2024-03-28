@@ -54,7 +54,7 @@ def compute_jnd_map(mono_image):
     luminance_adaptation = (
         luminance_adaptation_part_1 * (mean_luminance <= 127) 
         + luminance_adaptation_part_2 * (mean_luminance > 127))
-    
+
     # Compute the final metric
     just_noticable_distance = luminance_adaptation + visual_masking - 0.3 * np.min([luminance_adaptation, visual_masking], axis=0)
     return just_noticable_distance
@@ -113,8 +113,8 @@ def block_matching(p, x, y, qs_lab, W_h, W_v, S=16):
 def scribbling(Z, J, ps, color_image_lab, W_h, W_v, S=16, N=4):
     H, W = color_image_lab.shape[0:2]
     L = np.zeros((H, W, N))
-    U_a = np.zeros((H, W, N))
-    U_b = np.zeros((H, W, N))
+    U_a = np.zeros((H, W, N)) + 128
+    U_b = np.zeros((H, W, N)) + 128
     num_row, num_col = ps.shape[0:2]
     step = int(np.sqrt(S ** 2 / N))
     qs_lab = skimage.util.view_as_windows(color_image_lab, (S, S, 3))
@@ -145,6 +145,7 @@ def scribbling(Z, J, ps, color_image_lab, W_h, W_v, S=16, N=4):
 if __name__ == "__main__":
     # mono_test = np.ones((16, 16), np.uint8) * 10
     # compute_jnd_map(mono_test)
+
     m_bgr = cv2.imread("view1.png")
     c_bgr = cv2.imread("view5.png")
 
@@ -171,6 +172,8 @@ if __name__ == "__main__":
     res_lab = np.dstack((res_L, res_A, res_B)).astype(np.uint8)
     res_bgr = cv2.cvtColor(res_lab, cv2.COLOR_LAB2BGR)
     cv2.imwrite("test.png", res_bgr)
+
+
     pass
  
 
