@@ -58,8 +58,37 @@ def compute_jnd_map(mono_image):
 
 
 def sample_and_match_patches(mono_image, color_image_lab, N, S, W_h, W_v):
-    probability = N / (S ** 2)
-    raise NotImplementedError
+
+    # randomly sample some patch locations from the mono image
+    rng = np.random.default_rng()
+    mono_patch_bounds = np.argwhere(rng.random((mono_image.shape[0] - S + 1, mono_image.shape[1] - S + 1)) < (N / (S ** 2)))
+    
+    mono_patches = []
+    color_match_bounds = np.zeros_like(mono_patch_bounds)
+    color_matches = []
+    offset_y = (W_v // 2)
+    offset_x = (W_h // 2)
+    for i, (y_min, x_min) in enumerate(mono_patch_bounds):
+
+        # cut out the patch from the mono image
+        mono_patch = mono_image[y_min:y_min+S, x_min:x_min+S]
+        mono_patches.append(mono_patch)
+
+        # cut out the window of all possible patches from the color image's lightness channel
+        color_y_min = max(0, y_min - offset_y)
+        color_x_min = max(0, x_min - offset_x)
+        color_y_max = min(color_image_lab.shape[0], y_min + S + offset_y)
+        color_x_max = min(color_image_lab.shape[1], x_min + S + offset_x)
+        color_slice = color_image_lab[color_y_min:color_y_max, color_x_min:color_x_max, 0]
+
+        # find the match with the lowest residual energy
+        result = cv2.matchTemplate(color_slice, mono_patch, cv2.TM_SQDIFF)
+        match_y_min, match_x_min = np.unravel_index(np.argmin(result), result.shape)
+        color_match_bounds[i, 0] = match_y_min + color_y_min
+        color_match_bounds[i, 1] = match_x_min + color_x_min
+        color_matches.append(color_image_lab[match_y_min:match_y_min+S, match_x_min:match_x_min+S, :])
+
+    return mono_patches, mono_patch_bounds, color_matches, color_match_bounds
 
 if __name__ == "__main__":
     # mono_test = np.ones((16, 16), np.uint8) * 10
