@@ -1,5 +1,7 @@
 import numpy as np
 import cv2
+import skimage.util
+from matplotlib import pyplot as plt
 
 
 def denoise(color_image_bgr):
@@ -92,9 +94,82 @@ def sample_and_match_patches(mono_image, color_image_lab, N, S, W_h, W_v):
 
     return mono_patches, mono_patch_bounds, color_matches, color_match_bounds
 
+def patch_sampling(mono_image, S=16, N=4):
+    step = int(np.sqrt(S ** 2 / N))
+    ps = skimage.util.view_as_windows(mono_image, (S, S), step)
+    return ps
+
+def block_matching(p, x, y, qs_lab, W_h, W_v, S=16):
+    num_row, num_col = qs_lab.shape[0:2]
+    W_x = x - int(W_h / 2)
+    W_y = y - int(W_v / 2)
+    W_qs_lab = qs_lab[max(0, W_y):min(num_row, W_y + W_v), max(0, W_x):min(num_col, W_x + W_h), :, :, :]
+    num_row, num_col = W_qs_lab.shape[0:2]
+    W_qs_lab = W_qs_lab.reshape(num_row * num_col, S, S, 3)
+    norms = np.array([np.linalg.norm(p - q) for q in W_qs_lab[:, :, :, 0]])
+    return W_qs_lab[np.argmin(norms)]
+
+def scribbling(Z, J, ps, color_image_lab, W_h, W_v, S=16, N=4):
+    H, W = color_image_lab.shape[0:2]
+    L = np.zeros((H, W, N))
+    U_a = np.zeros((H, W, N))
+    U_b = np.zeros((H, W, N))
+    num_row, num_col = ps.shape[0:2]
+    step = int(np.sqrt(S ** 2 / N))
+    qs_lab = skimage.util.view_as_windows(color_image_lab, (S, S, 3))
+    qs_lab = qs_lab.reshape(qs_lab.shape[0], qs_lab.shape[1], S, S, 3)
+    for row in range(0, num_row):
+        for col in range(0, num_col):
+            p = ps[row, col]
+            p_x = col * step
+            p_y = row * step
+            q_lab = block_matching(p, p_x, p_y, qs_lab, W_h, W_v)
+            q_l = q_lab[:, :, 0]
+            q_a = q_lab[:, :, 1]
+            q_b = q_lab[:, :, 2]
+            print(row/num_row*100)
+            for S_y in range(0, S):
+                for S_x in range(0, S):
+                    x = p_x + S_x
+                    y = p_y + S_y
+                    n = Z[y, x]
+                    if np.abs(int(q_l[S_y, S_x]) - int(p[S_y, S_x])) <= 20 * J[y, x] and n < N:
+                        n = Z[y, x]
+                        L[y, x, n] = q_l[S_y, S_x]
+                        U_a[y, x, n] = q_a[S_y, S_x]
+                        U_b[y, x, n] = q_b[S_y, S_x]
+                        Z[y, x] += 1
+    return L, U_a, U_b
+
 if __name__ == "__main__":
     # mono_test = np.ones((16, 16), np.uint8) * 10
     # compute_jnd_map(mono_test)
+    m_bgr = cv2.imread("view1.png")
+    c_bgr = cv2.imread("view5.png")
+
+    m_lab = cv2.cvtColor(m_bgr, cv2.COLOR_BGR2LAB)
+    c_lab = cv2.cvtColor(c_bgr, cv2.COLOR_BGR2LAB)
+
+    m_l = m_lab[:, :, 0]
+    m_a = m_lab[:, :, 1]
+    m_b = m_lab[:, :, 2]
+
+    c_l = c_lab[:, :, 0]
+    c_a = c_lab[:, :, 1]
+    c_b = c_lab[:, :, 2]
+    ps = patch_sampling(m_l)
+    Z = np.zeros(m_lab.shape[0:2], int)
+    J = compute_jnd_map(m_l)
+    plt.imshow(J, cmap="gray")
+    plt.show()
+    L, U_a, U_b = scribbling(Z, J, ps, c_lab, 100, 30)
+
+    res_L = (L[:, :, 0] + L[:, :, 1] + L[:, :, 2] + L[:, :, 3]) / 4
+    res_A = (U_a[:, :, 0] + U_a[:, :, 1] + U_a[:, :, 2] + U_a[:, :, 3]) / 4
+    res_B = (U_b[:, :, 0] + U_b[:, :, 1] + U_b[:, :, 2] + U_b[:, :, 3]) / 4
+    res_lab = np.dstack((res_L, res_A, res_B)).astype(np.uint8)
+    res_bgr = cv2.cvtColor(res_lab, cv2.COLOR_LAB2BGR)
+    cv2.imwrite("test.png", res_bgr)
     pass
  
 
