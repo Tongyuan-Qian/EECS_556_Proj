@@ -84,8 +84,10 @@ def sample_and_match_patches(mono_image, color_image_lab, N, S, W_h, W_v):
         # find the match with the lowest residual energy
         result = cv2.matchTemplate(color_slice, mono_patch, cv2.TM_SQDIFF)
         match_y_min, match_x_min = np.unravel_index(np.argmin(result), result.shape)
-        color_match_bounds[i, 0] = match_y_min + color_y_min
-        color_match_bounds[i, 1] = match_x_min + color_x_min
+        match_y_min += color_y_min
+        match_x_min += color_x_min
+        color_match_bounds[i, 0] = match_y_min
+        color_match_bounds[i, 1] = match_x_min
         color_matches.append(color_image_lab[match_y_min:match_y_min+S, match_x_min:match_x_min+S, :])
 
     return mono_patches, mono_patch_bounds, color_matches, color_match_bounds
