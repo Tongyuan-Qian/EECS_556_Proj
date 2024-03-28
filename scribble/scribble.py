@@ -142,6 +142,57 @@ def scribbling(Z, J, ps, color_image_lab, W_h, W_v, S=16, N=4):
                         Z[y, x] += 1
     return L, U_a, U_b
 
+
+def color_seeds(mono_image_colorized_lab, mono_image_colorization_mask, B, tau_l, N_p, W_N, eps):
+
+    offset = W_N // 2
+
+    for y_min in range(0, mono_image_colorized_lab.shape[0], B):
+        for x_min in range(0, mono_image_colorized_lab.shape[1], B):
+
+            # cut the image into non-overlapping blocks of pixels
+            block = mono_image_colorized_lab[y_min:y_min+B, x_min:x_min+B, :]
+            block_mask = mono_image_colorization_mask[y_min:y_min+B, x_min:x_min+B, :]
+
+            # sort the pixels in each block by luminance
+            block_coords = np.mgrid[0:block.shape[0], 0:block.shape[1]].reshape((2, -1)).T
+            block_colors = block.reshape((-1, 3))
+            block_mask_values = block_mask.flatten()
+            argsorter = np.argsort(block_colors[:, 0], axis=0)
+            block_coords = block_coords[argsorter]
+            block_colors = block_colors[argsorter]
+            block_mask_values = block_mask_values[argsorter]
+
+            # split the pixels using a level splitter tau_l on the luminance channel
+            level_bounds = np.nonzero(block_colors[1:, 0] - block_colors[:-1, 0] > tau_l)[0] + 1
+            level_bounds = np.concatenate([[0], level_bounds, [len(block_colors)]])
+            for level_idx in range(len(level_bounds) - 1):
+                level_mask_values = block_mask_values[level_bounds[level_idx]:level_bounds[level_idx+1]]
+
+                # if the level has no colorization, generate a seed pixel
+                if (not np.any(level_mask_values)):
+                    seed_idx = np.random.default_rng().integers(level_bounds[level_idx], level_bounds[level_idx+1])
+                    seed_y = block_coords[seed_idx, 0] + y_min
+                    seed_x = block_coords[seed_idx, 1] + x_min
+                    window_y_min = max(0, seed_y - offset)
+                    window_x_min = max(0, seed_x - offset)
+                    window_y_max = min(mono_image_colorized_lab.shape[0], block_coords[seed_idx, 0] + y_min + offset)
+                    window_x_max = min(mono_image_colorized_lab.shape[1], block_coords[seed_idx, 1] + x_min + offset)
+                    candidate_colors = mono_image_colorized_lab[mono_image_colorization_mask[window_y_min:window_y_max, window_x_min:window_x_max]]
+                    if (len(candidate_colors) > 0):
+                        luminance_diffs = np.abs(block_colors[seed_idx, 0] - candidate_colors[:, 0])
+                        argsorter = np.argsort(luminance_diffs)
+                        candidate_colors = candidate_colors[argsorter][:N_p]
+                        luminance_diffs = luminance_diffs[argsorter][:N_p]
+                        candidate_weights = 1 / (luminance_diffs + eps)
+                        candidate_weights = candidate_weights / np.linalg.norm(candidate_weights)
+                        seed_color = np.sum(candidate_colors * candidate_weights.reshape((-1, 1)), axis=0)
+                        mono_image_colorized_lab[seed_y, seed_x, 1:3] = seed_color[1:3]
+
+    return mono_image_colorized_lab
+
+
+
 if __name__ == "__main__":
     # mono_test = np.ones((16, 16), np.uint8) * 10
     # compute_jnd_map(mono_test)
