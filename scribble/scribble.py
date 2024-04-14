@@ -217,6 +217,37 @@ def color_seeds(mono_image_colorized_lab, mono_image_colorization_mask, B, tau_l
 
     return mono_image_colorized_lab
 
+def normalization(L, Mono):
+    eps = 2 ** -52
+    rows, cols, N = L.shape
+    W_Prime = np.zeros(L.shape)
+    W = np.zeros(L.shape)
+    # Should be able to vectorize this later if needed
+    
+    for i in range(rows):
+        for j in range(cols):
+            for n in range(N):
+                W_Prime[i,j,n] = 1 / (np.abs(L[i,j,n] - Mono[i,j]) + eps) # Equation 2
+                
+    # Calculate all norm_consts along axis 2 first and then sum
+    norm_const = np.sum(W_Prime,axis=2)
+    for i in range(rows):
+        for j in range(cols):
+            #norm_const = np.sum(W_Prime[i,j,:]) # Equation 3
+            for n in range(N):
+                W[i,j,n] = W_Prime[i,j,n]/norm_const[i,j]
+    
+    
+    return W
+
+def weighted_avg(U, W):
+    #rows, cols, _ = U.shape
+    
+    dotted = np.multiply(U,W)
+    M = np.sum(dotted,2)
+    
+    
+    return M
 
 if __name__ == "__main__":
     # read image
@@ -253,9 +284,10 @@ if __name__ == "__main__":
     L, U_a, U_b = dense_scribbling(p_list, x_list, y_list, C_lab, W_h, W_v, J, S, N)
 
     # 14. compute weight matrix
-
+    W = normalization(L, M_l)
     # 15~16. weighted average
-
+    M_A = weighted_avg(U_a, W)
+    M_B = weighted_avg(U_b, W)
     # 17. valid match mask
 
     # 18. color ambiguous mask
