@@ -63,39 +63,39 @@ def compute_jnd_map(mono_image):
     return just_noticable_distance
 
 
-def sample_and_match_patches(mono_image, color_image_lab, N, S, W_h, W_v):
-    # randomly sample some patch locations from the mono image
-    rng = np.random.default_rng()
-    mono_patch_bounds = np.argwhere(
-        rng.random((mono_image.shape[0] - S + 1, mono_image.shape[1] - S + 1)) < (N / (S ** 2)))
+# def sample_and_match_patches(mono_image, color_image_lab, N, S, W_h, W_v):
+#     # randomly sample some patch locations from the mono image
+#     rng = np.random.default_rng()
+#     mono_patch_bounds = np.argwhere(
+#         rng.random((mono_image.shape[0] - S + 1, mono_image.shape[1] - S + 1)) < (N / (S ** 2)))
 
-    mono_patches = []
-    color_match_bounds = np.zeros_like(mono_patch_bounds)
-    color_matches = []
-    offset_y = (W_v // 2)
-    offset_x = (W_h // 2)
-    for i, (y_min, x_min) in enumerate(mono_patch_bounds):
-        # cut out the patch from the mono image
-        mono_patch = mono_image[y_min:y_min + S, x_min:x_min + S]
-        mono_patches.append(mono_patch)
+#     mono_patches = []
+#     color_match_bounds = np.zeros_like(mono_patch_bounds)
+#     color_matches = []
+#     offset_y = (W_v // 2)
+#     offset_x = (W_h // 2)
+#     for i, (y_min, x_min) in enumerate(mono_patch_bounds):
+#         # cut out the patch from the mono image
+#         mono_patch = mono_image[y_min:y_min + S, x_min:x_min + S]
+#         mono_patches.append(mono_patch)
 
-        # cut out the window of all possible patches from the color image's lightness channel
-        color_y_min = max(0, y_min - offset_y)
-        color_x_min = max(0, x_min - offset_x)
-        color_y_max = min(color_image_lab.shape[0], y_min + S + offset_y)
-        color_x_max = min(color_image_lab.shape[1], x_min + S + offset_x)
-        color_slice = color_image_lab[color_y_min:color_y_max, color_x_min:color_x_max, 0]
+#         # cut out the window of all possible patches from the color image's lightness channel
+#         color_y_min = max(0, y_min - offset_y)
+#         color_x_min = max(0, x_min - offset_x)
+#         color_y_max = min(color_image_lab.shape[0], y_min + S + offset_y)
+#         color_x_max = min(color_image_lab.shape[1], x_min + S + offset_x)
+#         color_slice = color_image_lab[color_y_min:color_y_max, color_x_min:color_x_max, 0]
 
-        # find the match with the lowest residual energy
-        result = cv2.matchTemplate(color_slice, mono_patch, cv2.TM_SQDIFF)
-        match_y_min, match_x_min = np.unravel_index(np.argmin(result), result.shape)
-        match_y_min += color_y_min
-        match_x_min += color_x_min
-        color_match_bounds[i, 0] = match_y_min
-        color_match_bounds[i, 1] = match_x_min
-        color_matches.append(color_image_lab[match_y_min:match_y_min + S, match_x_min:match_x_min + S, :])
+#         # find the match with the lowest residual energy
+#         result = cv2.matchTemplate(color_slice, mono_patch, cv2.TM_SQDIFF)
+#         match_y_min, match_x_min = np.unravel_index(np.argmin(result), result.shape)
+#         match_y_min += color_y_min
+#         match_x_min += color_x_min
+#         color_match_bounds[i, 0] = match_y_min
+#         color_match_bounds[i, 1] = match_x_min
+#         color_matches.append(color_image_lab[match_y_min:match_y_min + S, match_x_min:match_x_min + S, :])
 
-    return mono_patches, mono_patch_bounds, color_matches, color_match_bounds
+#     return mono_patches, mono_patch_bounds, color_matches, color_match_bounds
 
 
 def patch_sampling(mono_image, S, rho, mode=0):
@@ -140,15 +140,14 @@ def block_matching(p, x, y, qs_lab, W_h, W_v, S):
 def dense_scribbling(p_list, x_list, y_list, C_lab, W_h, W_v, J, S, N):
     H, W = C_lab.shape[0:2]
     Z = np.zeros((H, W), dtype=int)
-    L = np.zeros((H, W, N), dtype=np.float64)
-    U_a = np.full((H, W, N), 128, dtype=np.float64)
-    U_b = np.full((H, W, N), 128, dtype=np.float64)
+    L = np.full((H, W, N), np.nan, dtype=np.float64)  # np.zeros((H, W, N), dtype=np.float64)
+    U_a = np.full((H, W, N), np.nan, dtype=np.float64)
+    U_b = np.full((H, W, N), np.nan, dtype=np.float64)
 
     qs_lab = skimage.util.view_as_windows(C_lab, (S, S, 3))
     qs_lab = qs_lab.reshape(qs_lab.shape[0], qs_lab.shape[1], S, S, 3)
 
     K = p_list.shape[0]
-    print("Dense Scribbling Start")
     for k in tqdm(range(0, K)):
         p, p_x, p_y = p_list[k], x_list[k], y_list[k]
         q_lab = block_matching(p, p_x, p_y, qs_lab, W_h, W_v, S)
@@ -164,20 +163,21 @@ def dense_scribbling(p_list, x_list, y_list, C_lab, W_h, W_v, J, S, N):
                     U_a[y, x, n] = q_a[S_y, S_x]
                     U_b[y, x, n] = q_b[S_y, S_x]
                     Z[y, x] += 1
+                    
+    return Z, L, U_a, U_b
 
-    print(f"Dense Scribbling Done")
-    return L, U_a, U_b
 
+def color_seeds(mono_image_colorized_lab, mono_image_colorization_mask, B=20, tau_l=9, N_p=3, W_N=50, eps=2**-52):
 
-def color_seeds(mono_image_colorized_lab, mono_image_colorization_mask, B, tau_l, N_p, W_N, eps):
     offset = W_N // 2
+    mask_seed_pixels = np.full(mono_image_colorization_mask.shape, False)
 
     for y_min in range(0, mono_image_colorized_lab.shape[0], B):
         for x_min in range(0, mono_image_colorized_lab.shape[1], B):
 
             # cut the image into non-overlapping blocks of pixels
             block = mono_image_colorized_lab[y_min:y_min + B, x_min:x_min + B, :]
-            block_mask = mono_image_colorization_mask[y_min:y_min + B, x_min:x_min + B, :]
+            block_mask = mono_image_colorization_mask[y_min:y_min + B, x_min:x_min + B]
 
             # sort the pixels in each block by luminance
             block_coords = np.mgrid[0:block.shape[0], 0:block.shape[1]].reshape((2, -1)).T
@@ -201,59 +201,70 @@ def color_seeds(mono_image_colorized_lab, mono_image_colorization_mask, B, tau_l
                     seed_x = block_coords[seed_idx, 1] + x_min
                     window_y_min = max(0, seed_y - offset)
                     window_x_min = max(0, seed_x - offset)
-                    window_y_max = min(mono_image_colorized_lab.shape[0], block_coords[seed_idx, 0] + y_min + offset)
-                    window_x_max = min(mono_image_colorized_lab.shape[1], block_coords[seed_idx, 1] + x_min + offset)
-                    candidate_colors = mono_image_colorized_lab[
-                        mono_image_colorization_mask[window_y_min:window_y_max, window_x_min:window_x_max]]
+                    window_y_max = min(mono_image_colorized_lab.shape[0], seed_y + offset)
+                    window_x_max = min(mono_image_colorized_lab.shape[1], seed_x + offset)
+                    candidate_colors = mono_image_colorized_lab[window_y_min:window_y_max, window_x_min:window_x_max].reshape((-1, 3))
+                    candidate_mask = mono_image_colorization_mask[window_y_min:window_y_max, window_x_min:window_x_max].flatten()
+                    candidate_colors = candidate_colors[candidate_mask]
+
                     if (len(candidate_colors) > 0):
                         luminance_diffs = np.abs(block_colors[seed_idx, 0] - candidate_colors[:, 0])
                         argsorter = np.argsort(luminance_diffs)
                         candidate_colors = candidate_colors[argsorter][:N_p]
                         luminance_diffs = luminance_diffs[argsorter][:N_p]
                         candidate_weights = 1 / (luminance_diffs + eps)
-                        candidate_weights = candidate_weights / np.linalg.norm(candidate_weights)
-                        seed_color = np.sum(candidate_colors * candidate_weights.reshape((-1, 1)), axis=0)
+                        candidate_weights = candidate_weights / np.sum(candidate_weights)
+                        seed_color = np.sum(candidate_colors * candidate_weights[:, np.newaxis], axis=0)
                         mono_image_colorized_lab[seed_y, seed_x, 1:3] = seed_color[1:3]
+                        mask_seed_pixels[seed_y, seed_x] = True
 
-    return mono_image_colorized_lab
+    return mono_image_colorized_lab, mask_seed_pixels
 
-def normalization(L, Mono):
-    eps = 2 ** -52
-    rows, cols, N = L.shape
-    W_Prime = np.zeros(L.shape)
-    W = np.zeros(L.shape)
-    # Should be able to vectorize this later if needed
-    
-    for i in range(rows):
-        for j in range(cols):
-            for n in range(N):
-                W_Prime[i,j,n] = 1 / (np.abs(L[i,j,n] - Mono[i,j]) + eps) # Equation 2
-                
-    # Calculate all norm_consts along axis 2 first and then sum
-    norm_const = np.sum(W_Prime,axis=2)
-    for i in range(rows):
-        for j in range(cols):
-            #norm_const = np.sum(W_Prime[i,j,:]) # Equation 3
-            for n in range(N):
-                W[i,j,n] = W_Prime[i,j,n]/norm_const[i,j]
-    
-    
+
+# def normalization(L, Mono):
+#     eps = 2 ** -52
+#     rows, cols, N = L.shape
+#     W_Prime = np.zeros(L.shape)
+#     W = np.zeros(L.shape)
+#     # Should be able to vectorize this later if needed
+#     for i in range(rows):
+#         for j in range(cols):
+#             for n in range(N):
+#                 W_Prime[i,j,n] = 1 / (np.abs(L[i,j,n] - Mono[i,j]) + eps) # Equation 2    
+#     # Calculate all norm_consts along axis 2 first and then sum
+#     norm_const = np.sum(W_Prime,axis=2)
+#     for i in range(rows):
+#         for j in range(cols):
+#             #norm_const = np.sum(W_Prime[i,j,:]) # Equation 3
+#             for n in range(N):
+#                 W[i,j,n] = W_Prime[i,j,n]/norm_const[i,j]
+#     return W
+
+
+def compute_weights(L, M, eps=2**-52):
+    W_prime = np.reciprocal(np.abs(L - M[:, :, np.newaxis]) + eps)
+    W = np.divide(W_prime, np.nansum(W_prime, axis=-1, keepdims=True))
     return W
 
+
 def weighted_avg(U, W):
-    #rows, cols, _ = U.shape
-    
-    dotted = np.multiply(U,W)
-    M = np.sum(dotted,2)
-    
-    
-    return M
+    U_weighted = np.multiply(U, W)
+    U_weighted_average = np.nansum(U_weighted, axis=-1)
+    return U_weighted_average  # warning: U_weighted_average = 0 for unmatched pixels
+
+
+def compute_mask_unambiguous(U, tau=5):
+    U_sorted = np.sort(U, axis=-1)  # nan values remain at end of each U[i, j]
+    differences = U_sorted[:, :, 1:] - U_sorted[:, :, :-1]
+    return np.all(differences <= tau, axis=-1)  # comparison against nan values is False
+
 
 if __name__ == "__main__":
+
     # read image
+    print("Reading image...")
     M_bgr = cv2.imread("view1.png")  # mono image
     C_bgr = cv2.imread("view5.png")  # color image
-
     H_M, W_M = M_bgr.shape[0:2]
     H_C, W_C = C_bgr.shape[0:2]
     assert H_M == H_C and W_M == W_C
@@ -267,39 +278,59 @@ if __name__ == "__main__":
     eps = 1 / (2 ** 52)
 
     # 1. pre denoise and convert color
+    print("Denoising...")
     # TODO pre denoise
+
+    print("Converting color...")
     M_lab = cv2.cvtColor(M_bgr, cv2.COLOR_BGR2LAB)
     C_lab = cv2.cvtColor(C_bgr, cv2.COLOR_BGR2LAB)
     M_l, _, _ = cv2.split(M_lab)
     C_l, C_a, C_b = cv2.split(C_lab)
 
     # 2. patch sampling
+    print("Patch sampling...")
     rho = N / (S ** 2)
     p_list, x_list, y_list = patch_sampling(M_l, S, rho)
 
     # 3. JND
+    print("Computing JND...")
     J = compute_jnd_map(M_l)
 
     # 4~13. dense scribbling
-    L, U_a, U_b = dense_scribbling(p_list, x_list, y_list, C_lab, W_h, W_v, J, S, N)
+    print("Dense scribbling...")
+    Z, L, U_a, U_b = dense_scribbling(p_list, x_list, y_list, C_lab, W_h, W_v, J, S, N)
 
     # 14. compute weight matrix
-    W = normalization(L, M_l)
+    print("Computing and normalizing weights...")
+    # W = normalization(L, M_l)
+    W = compute_weights(L, M_l)
+
     # 15~16. weighted average
-    M_A = weighted_avg(U_a, W)
-    M_B = weighted_avg(U_b, W)
+    print("Estimating colors...")
+    M_a = weighted_avg(U_a, W)
+    M_b = weighted_avg(U_b, W)
+
     # 17. valid match mask
+    print("Computing valid match mask...")
+    mask_valid = np.greater_equal(Z, T)
 
     # 18. color ambiguous mask
+    print("Computing ambiguous color mask..")
+    mask_unambiguous_a = compute_mask_unambiguous(U_a)
+    mask_unambiguous_b = compute_mask_unambiguous(U_b)
+    mask_combined = np.all([mask_valid, mask_unambiguous_a, mask_unambiguous_b], axis=0)
 
     # 19. seed generation
+    print("Generating seed pixels...")
+    M_colorized = np.dstack((M_l, M_a, M_b))
+    M_colorized, mask_seed_pixels = color_seeds(M_colorized, mask_combined)
+    mask_combined = np.any([mask_combined, mask_seed_pixels], axis=0)
 
     # 20. color propagation
+    # print("Propagating colors...")
 
     # 21. return
-    res_L = (L[:, :, 0] + L[:, :, 1] + L[:, :, 2] + L[:, :, 3]) / 4
-    res_A = (U_a[:, :, 0] + U_a[:, :, 1] + U_a[:, :, 2] + U_a[:, :, 3]) / 4
-    res_B = (U_b[:, :, 0] + U_b[:, :, 1] + U_b[:, :, 2] + U_b[:, :, 3]) / 4
-    res_lab = np.dstack((res_L, res_A, res_B)).astype(np.uint8)
-    res_bgr = cv2.cvtColor(res_lab, cv2.COLOR_LAB2BGR)
-    cv2.imwrite("test_poisson.png", res_bgr)
+    print("Saving output...")
+    M_colorized[np.logical_not(mask_combined)] = [0, 127, 127]
+    res_bgr = cv2.cvtColor(M_colorized.astype(np.uint8), cv2.COLOR_LAB2BGR)
+    cv2.imwrite("test_new.png", res_bgr)
