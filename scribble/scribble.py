@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import skimage.util
+import skimage.metrics
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 import poisson_disc
@@ -263,6 +264,17 @@ def compute_mask_unambiguous(U, tau=5):
     differences = U_sorted[:, :, 1:] - U_sorted[:, :, :-1]
     return np.all(differences <= tau, axis=-1)  # comparison against nan values is False
 
+def evaluation_metrics(Original, Out):
+    
+    psnr = cv2.PSNR(Original, Out)
+    ssim = skimage.metrics.structural_similarity(Original, Out, channel_axis=2)
+    delta_e = np.mean(skimage.color.deltaE_cie76(Original, Out))
+    
+    
+    
+
+    
+    end
 
 # if __name__ == "__main__":
 #
