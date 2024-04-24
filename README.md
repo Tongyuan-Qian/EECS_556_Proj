@@ -1,5 +1,5 @@
 
-# My Paper Title
+# EECS 556 Guided Image Colorization
 
 This repository is an attempted recreation of [Guided Colorization Using Mono-Color Image Pairs](https://ieeexplore.ieee.org/document/10017185). 
 
@@ -15,48 +15,53 @@ To install requirements:
 pip install -r requirements.txt
 ```
 
->📋  Describe how to set up the environment, e.g. pip/conda/docker commands, download datasets, etc...
 
 The Middlebury dataset is only 30 images, and it is contained in ALL-2views. One can also find the original dataset with larger images at https://vision.middlebury.edu/stereo/data/ .
 ## Training/Evaluation
 
 To run out model, all one has to do is run the colorize.py. Given we only used the Middlebury 2005-2006 dataset, the current code is designed to iterate over all the fules in the ALL-2views directory, so no changes need to be made. Evaluation metrics for each image and overall evaluation metrics are outputted to the command line, but could be saved easily to a csv by adding data storage commands ~lines 129 (each image evaluation) and at the end of file. 
 
-Hyper
+Hyperparamters:
+The main hyperparameters for the model (we didn't up testing with noise as we tried to fix the incoherent colorization) are: 
 
->📋  Describe how to train the models, with example commands on how to train the models in your paper, including the full training procedure and appropriate hyperparameters.
+S (Patch Size), default = 16
+Rho (Sample Rate, determines Step), default = N / S ** 2
+W_h (Horizontal Search Window Size), default = 100 (for simplicity, original paper bases it off maximum difference throughout image)
+W_v (Vertical Search Window Size), default = 30
+N (Max Number of Dense Scribbling Matches), default = 5
+T (Threshold of Matches to determine good colorization), default = 5
 
-## Evaluation
+Note:  [Guided Colorization Using Mono-Color Image Pairs](https://ieeexplore.ieee.org/document/10017185) shows that N=T=5 leads to optimal colorization. 
 
-To evaluate my model on ImageNet, run:
+These hyperparameters can be found in colorize.py ~lines 47-51
 
-```eval
-python eval.py --model-file mymodel.pth --benchmark imagenet
-```
+evaluation.py also has some hyperparameters:
+sigmaX (For Gaussian Weighted Mean) = 1 [Image-Difference Prediction: From Grayscale to Color](\https://ieeexplore.ieee.org/document/6307862) 's MATLAB implementation is on a deprecated website, so we picked reasonable hyperparamaters, but they are subject to change. 
 
->📋  Describe how to evaluate the trained models on benchmarks reported in the paper, give commands that produce the results (section below).
+a and c hyperparameters are provided in the paper above. 
 
-## Pre-trained Models
+S (Patch Size), default = 15. This is needed to be odd for the Gaussian weighted mean. Given we used the smaller image dataset, any patch size smaller than 15 leads to issues with multiscale CID's downsampling to 1x1 patches. This led to a N=3 multiscale CID. 
 
-You can download pretrained models here:
+Step, default = 10. Step hyperparameter for CID calculation not given, picked 10 for runtime speed up while not sacrificing overall metric. 
 
-- [My awesome model](https://drive.google.com/mymodel.pth) trained on ImageNet using parameters x,y,z. 
+PSNR, SSIM, DeltaE_cie76 (Average Euclidean distance between each pixel's LAB), CID outputted for each image and for full dataset in command line by running colorize.py with no input parameters. 
 
->📋  Give a link to where/how the pretrained models can be downloaded and how they were trained (if applicable).  Alternatively you can have an additional column in your results table with a link to the models.
+
+
+
+
 
 ## Results
 
-Our model achieves the following performance on :
-
-### [Image Classification on ImageNet](https://paperswithcode.com/sota/image-classification-on-imagenet)
-
-| Model name         | Top 1 Accuracy  | Top 5 Accuracy |
-| ------------------ |---------------- | -------------- |
-| My awesome model   |     85%         |      95%       |
-
->📋  Include a table of results from your paper, and link back to the leaderboard for clarity and context. If your main result is a figure, include that figure and link to the command or notebook to reproduce it. 
+Our model achieves the following performance on the Middlebury Dataset :
 
 
-## Contributing
+| Model name          | PSNR ^ | SSIM ^ | DeltaE v | CID v |
+| ------------------  |--------| -------|--------- |-------|
+| Colorization Model  |  15.05 |  .367  |   60.56  | .4947 |
+| Original Work       |  37.29 |  .989  |    2.13  | .0265 |
 
->📋  Pick a licence and describe how to contribute to your code repository. 
+
+
+
+
